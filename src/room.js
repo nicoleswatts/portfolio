@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { createLeopardTexture, createFuzzTexture, createStripeTexture } from "./textures.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { createLeopardTexture, createFuzzTexture, createStripeTexture, createZebraTexture } from "./textures.js";
 
 const PALETTE = {
   hotPink: 0xff2d93,
@@ -13,7 +14,42 @@ const PALETTE = {
   darkBrown: 0x2c1c10,
   glassPink: 0xff8fc4,
   screenPink: 0xffd6ec,
+  lavender: 0xc9a8ea,
+  screenOff: 0x100c14,
 };
+
+// Classic three.js "heart" bezier shape, centered on its own bounding box
+// and normalized so `makeHeartMesh(width, depth, material)` produces a
+// heart roughly `width` units wide.
+function createHeartShape() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0.25, 0.25);
+  shape.bezierCurveTo(0.25, 0.25, 0.2, 0, 0, 0);
+  shape.bezierCurveTo(-0.3, 0, -0.3, 0.35, -0.3, 0.35);
+  shape.bezierCurveTo(-0.3, 0.55, -0.1, 0.77, 0.25, 0.95);
+  shape.bezierCurveTo(0.6, 0.77, 0.8, 0.55, 0.8, 0.35);
+  shape.bezierCurveTo(0.8, 0.35, 0.8, 0, 0.5, 0);
+  shape.bezierCurveTo(0.35, 0, 0.25, 0.25, 0.25, 0.25);
+  return shape;
+}
+
+function makeHeartMesh(width, depth, material) {
+  const shape = createHeartShape();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: depth * 0.35,
+    bevelSize: depth * 0.25,
+    bevelSegments: 2,
+    steps: 1,
+  });
+  geo.center();
+  const scale = width / 1.1; // shape spans ~1.1 x ~0.95 units before normalizing
+  geo.scale(scale, scale, scale);
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  return mesh;
+}
 
 function makeStandard(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.05, ...opts });
@@ -275,67 +311,114 @@ export function buildRoom(scene) {
   dresser.position.set(2.55, 0, 0.3);
   room.add(dresser);
 
-  const dresserBody = box(0.55, 0.85, 1.3, makeStandard(0xffffff, { roughness: 0.4 }));
+  const dresserBody = box(0.55, 0.85, 1.3, makeStandard(0xfff6fa, { roughness: 0.45 }));
   dresserBody.position.y = 0.425;
   dresser.add(dresserBody);
-  for (const dz of [-0.4, 0, 0.4]) {
-    const drawer = box(0.5, 0.22, 0.05, makeStandard(PALETTE.pink, { roughness: 0.5 }));
-    drawer.position.set(-0.29, 0.35, dz);
+
+  // glossy black lacquer top slab the TV sits on
+  const dresserTop = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.04, 1.36),
+    new THREE.MeshPhysicalMaterial({ color: 0x100c10, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, metalness: 0.1 })
+  );
+  dresserTop.position.y = 0.87;
+  dresserTop.castShadow = true;
+  dresserTop.receiveShadow = true;
+  dresser.add(dresserTop);
+
+  // drawer fronts: alternating pink + zebra print bands
+  const zebraTex = createZebraTexture({ seed: 12, repeatX: 1.4, repeatY: 1 });
+  const drawerData = [
+    { z: -0.4, zebra: false },
+    { z: 0, zebra: true },
+    { z: 0.4, zebra: false },
+  ];
+  for (const { z, zebra } of drawerData) {
+    const mat = zebra
+      ? makeStandard(0xffffff, { map: zebraTex, roughness: 0.5 })
+      : makeStandard(PALETTE.pink, { roughness: 0.5 });
+    const drawer = box(0.5, 0.22, 0.34, mat);
+    drawer.position.set(-0.29, 0.35, z);
     dresser.add(drawer);
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), makeStandard(PALETTE.gold, { metalness: 0.7 }));
-    knob.position.set(-0.32, 0.35, dz);
+    knob.position.set(-0.55, 0.35, z);
     dresser.add(knob);
   }
 
+  // --- princess TV: glossy pink rounded body, heart + speaker "ears" on top ---
   const tv = new THREE.Group();
-  tv.position.set(-0.35, 0.85, 0);
+  tv.position.set(-0.35, 1.08, 0);
   tv.userData.id = "princessTv";
   dresser.add(tv);
 
-  const tvBody = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), makeStandard(PALETTE.pink, { roughness: 0.45 }));
-  tvBody.scale.set(1, 0.82, 0.92);
+  const trimMat = makeStandard(PALETTE.lavender, { roughness: 0.35 });
+
+  const tvBodyMat = new THREE.MeshPhysicalMaterial({
+    color: PALETTE.pink,
+    roughness: 0.28,
+    clearcoat: 0.9,
+    clearcoatRoughness: 0.15,
+    metalness: 0.05,
+  });
+  const tvBody = new THREE.Mesh(new RoundedBoxGeometry(0.52, 0.42, 0.6, 4, 0.07), tvBodyMat);
+  tvBody.castShadow = true;
   tv.add(tvBody);
 
-  const screenMat = makeStandard(PALETTE.screenPink, { emissive: 0xff9ecf, emissiveIntensity: 0.4, roughness: 0.2 });
-  const screen = new THREE.Mesh(new THREE.CircleGeometry(0.2, 24), screenMat);
-  screen.position.set(-0.28, 0.02, 0);
+  // lavender bezel + black "off" screen, front face
+  const screenMat = new THREE.MeshPhysicalMaterial({
+    color: PALETTE.screenOff,
+    roughness: 0.2,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.15,
+  });
+  const screen = new THREE.Mesh(new THREE.CircleGeometry(0.105, 28), screenMat);
+  screen.position.set(-0.261, 0.0, 0);
   screen.rotation.y = -Math.PI / 2;
   tv.add(screen);
-  const screenRim = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.025, 8, 24), makeStandard(PALETTE.hotPink, { roughness: 0.4 }));
-  screenRim.position.set(-0.29, 0.02, 0);
+  const screenRim = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.017, 8, 28), trimMat);
+  screenRim.position.set(-0.262, 0.0, 0);
   screenRim.rotation.y = Math.PI / 2;
   tv.add(screenRim);
 
-  // tiara on top
-  const tiara = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.02, 8, 20, Math.PI), makeStandard(PALETTE.gold, { metalness: 0.8, roughness: 0.15 }));
-  tiara.rotation.x = Math.PI;
-  tiara.position.set(0, 0.28, 0);
-  tv.add(tiara);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), makeStandard(0xffffff, { metalness: 0.3, roughness: 0.1, emissive: 0xffe0f5, emissiveIntensity: 0.6 }));
-  gem.position.set(0, 0.42, 0);
-  tv.add(gem);
-
-  // antenna "ears"
-  for (const dx of [-0.14, 0.14]) {
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.28, 6), makeStandard(PALETTE.chrome, { metalness: 0.8 }));
-    antenna.position.set(dx, 0.4, 0);
-    antenna.rotation.z = dx > 0 ? -0.3 : 0.3;
-    tv.add(antenna);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), makeStandard(PALETTE.gold, { metalness: 0.6 }));
-    tip.position.set(dx * 1.7, 0.53, 0);
-    tv.add(tip);
-  }
-
-  const tvLight = new THREE.PointLight(0xffb3dd, 0.6, 1.2);
-  tvLight.position.set(-0.4, 0, 0);
-  tv.add(tvLight);
-  animated.push({
-    update(t) {
-      screenMat.emissiveIntensity = 0.35 + Math.sin(t * 2.2) * 0.15;
-    },
+  // control button strip below the screen
+  const btnColors = [PALETTE.lavender, PALETTE.hotPink, PALETTE.lavender];
+  btnColors.forEach((c, i) => {
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 12), makeStandard(c, { roughness: 0.4 }));
+    btn.rotation.z = Math.PI / 2;
+    btn.position.set(-0.263, -0.16, (i - 1) * 0.06);
+    tv.add(btn);
   });
 
-  addGlow(tv, 0xff8fc4, 0.55, 0);
+  // heart applique centered between the speakers, on the top-front edge
+  const tvHeartOutline = makeHeartMesh(0.2, 0.02, trimMat);
+  tvHeartOutline.rotation.y = -Math.PI / 2;
+  tvHeartOutline.position.set(-0.26, 0.2, 0);
+  tv.add(tvHeartOutline);
+  const tvHeart = makeHeartMesh(0.15, 0.03, makeStandard(PALETTE.hotPink, { roughness: 0.3 }));
+  tvHeart.rotation.y = -Math.PI / 2;
+  tvHeart.position.set(-0.28, 0.2, 0);
+  tv.add(tvHeart);
+
+  // round speaker "ears" flanking the heart, tucked into the top corners
+  for (const dz of [-0.22, 0.22]) {
+    const speaker = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 24), makeStandard(PALETTE.pink, { roughness: 0.3 }));
+    speaker.rotation.z = Math.PI / 2;
+    speaker.position.set(-0.27, 0.14, dz);
+    tv.add(speaker);
+    const speakerRingOuter = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.011, 8, 24), trimMat);
+    speakerRingOuter.rotation.y = Math.PI / 2;
+    speakerRingOuter.position.set(-0.285, 0.14, dz);
+    tv.add(speakerRingOuter);
+    const speakerRingInner = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.007, 8, 20), trimMat);
+    speakerRingInner.rotation.y = Math.PI / 2;
+    speakerRingInner.position.set(-0.285, 0.14, dz);
+    tv.add(speakerRingInner);
+  }
+
+  const tvLight = new THREE.PointLight(0xd9c2ff, 0.4, 1.0);
+  tvLight.position.set(-0.3, 0.1, 0);
+  tv.add(tvLight);
+
+  addGlow(tv, 0xff8fc4, 0.55, 0.1);
   clickable.push(tv);
   glows.push(tv.children[tv.children.length - 1]);
 

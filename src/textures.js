@@ -108,6 +108,59 @@ export function createFuzzTexture({
 }
 
 /**
+ * Procedural zebra-print canvas texture — wavy black stripes on white,
+ * used for the dresser drawer fronts.
+ */
+export function createZebraTexture({
+  size = 256,
+  base = "#f8f4f0",
+  stripe = "#231a17",
+  stripeCount = 9,
+  repeatX = 1,
+  repeatY = 1,
+  seed = 21,
+} = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const rng = makeRng(seed);
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.fillStyle = stripe;
+  const gap = size / stripeCount;
+  for (let i = 0; i < stripeCount; i++) {
+    const cx = i * gap + rng() * gap * 0.3;
+    const wobble = 4 + rng() * 4;
+    ctx.beginPath();
+    ctx.moveTo(cx, 0);
+    const segs = 6;
+    for (let s = 1; s <= segs; s++) {
+      const y = (s / segs) * size;
+      const x = cx + Math.sin(s * 1.7 + rng() * 2) * wobble;
+      ctx.lineTo(x, y);
+    }
+    const w = gap * (0.45 + rng() * 0.25);
+    for (let s = segs; s >= 0; s--) {
+      const y = (s / segs) * size;
+      const x = cx + Math.sin(s * 1.7 + rng() * 2) * wobble + w;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeatX, repeatY);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
  * Simple vertical stripe texture, used for the accent wall.
  */
 export function createStripeTexture({
