@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>y2k bedroom ✧ portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="loading-text">✧ loading room ✧</div>
+    <div class="loading-bar-track"><div class="loading-bar-fill"></div></div>
+  </div>
+
+  <div id="hud">
+    <div id="title-badge">my room ✧ click things</div>
+    <button id="reset-view-btn" class="hidden" title="Back to room view">⟲ room view</button>
+  </div>
+
+  <div id="hint" class="hint">click glowing objects to explore</div>
+
+  <div id="overlay" class="overlay hidden">
+    <div class="overlay-panel">
+      <button id="overlay-close">✕</button>
+      <div class="overlay-tag" id="overlay-tag">project</div>
+      <h2 id="overlay-title">Title</h2>
+      <p id="overlay-desc">Description</p>
+      <a id="overlay-link" href="#" target="_blank" rel="noopener">view project ↗</a>
+    </div>
+  </div>
+
+  <canvas id="scene"></canvas>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
