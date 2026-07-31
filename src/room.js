@@ -536,17 +536,6 @@ export function buildRoom(scene) {
   clickable.push(lavaLamp);
   glows.push(lavaLamp.children[lavaLamp.children.length - 1]);
 
-  // little desk lamp for ambience (non-clickable)
-  const deskLampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.03, 12), deskLegMat);
-  deskLampBase.position.set(-0.55, 0.79, -0.15);
-  desk.add(deskLampBase);
-  const deskLampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.25, 8), deskLegMat);
-  deskLampPole.position.set(-0.55, 0.9, -0.15);
-  desk.add(deskLampPole);
-  const deskLampShade = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.12, 12, 1, true), makeStandard(PALETTE.gold, { side: THREE.DoubleSide }));
-  deskLampShade.position.set(-0.55, 1.06, -0.15);
-  desk.add(deskLampShade);
-
   // ================= DRESSER + PRINCESS TV (clickable) =================
   const dresser = new THREE.Group();
   dresser.position.set(2.55, 0, 0.3);
