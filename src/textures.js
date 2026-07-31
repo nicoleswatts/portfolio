@@ -160,6 +160,105 @@ export function createZebraTexture({
   return texture;
 }
 
+function drawMiniHeart(ctx, cx, cy, size) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + size * 0.32);
+  ctx.bezierCurveTo(cx - size, cy - size * 0.5, cx - size * 0.35, cy - size * 1.1, cx, cy - size * 0.35);
+  ctx.bezierCurveTo(cx + size * 0.35, cy - size * 1.1, cx + size, cy - size * 0.5, cx, cy + size * 0.32);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Round metallic speaker-grille texture (concentric rings + dark center),
+ * used for the princess TV's speaker "ears".
+ */
+export function createSpeakerGrilleTexture({ size = 128, base = "#3a3a44", ring = "#9a9aa8" } = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = base;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = size * 0.05;
+  for (let r = size * 0.16; r < size * 0.47; r += size * 0.13) {
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#121216";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * The princess TV's control-panel decal: power icon, a row of heart
+ * buttons with labels, and a "DVD" pill slot.
+ */
+export function createTvPanelTexture({ width = 512, height = 256, bg = "#e79fc4" } = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  // power icon, top-left
+  ctx.strokeStyle = "#7a3b63";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(46, 40, 15, 0.35 * Math.PI, 1.65 * Math.PI);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(46, 22);
+  ctx.lineTo(46, 38);
+  ctx.stroke();
+
+  // heart buttons + labels
+  const heartXs = [180, 258, 336, 414];
+  const labels = ["BACK", "CHANNEL", "VOLUME", "MENU"];
+  ctx.fillStyle = "#ff5fa8";
+  heartXs.forEach((hx) => drawMiniHeart(ctx, hx, 40, 15));
+  ctx.fillStyle = "#5a2c46";
+  ctx.font = "bold 14px 'Space Mono', monospace";
+  ctx.textAlign = "center";
+  heartXs.forEach((hx, i) => ctx.fillText(labels[i], hx, 78));
+
+  // DVD pill slot
+  ctx.fillStyle = "#c9a8ea";
+  drawRoundRect(ctx, 70, 150, width - 140, 62, 31);
+  ctx.fill();
+  ctx.fillStyle = "#4a2f5a";
+  ctx.font = "bold 26px 'Space Mono', monospace";
+  ctx.fillText("DVD", width / 2, 190);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /**
  * Simple vertical stripe texture, used for the accent wall.
  */
