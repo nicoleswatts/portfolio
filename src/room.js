@@ -7,6 +7,7 @@ import {
   createZebraTexture,
   createSpeakerGrilleTexture,
   createTvPanelTexture,
+  createTuftingTexture,
 } from "./textures.js";
 
 const PALETTE = {
@@ -25,6 +26,7 @@ const PALETTE = {
   screenOff: 0x100c14,
   rose: 0xe08fb8,
   leopardPinkBase: 0xff8fc4,
+  black: 0x17141a,
 };
 
 // Classic three.js "heart" bezier shape, centered on its own bounding box
@@ -53,10 +55,38 @@ function makeHeartMesh(width, depth, material) {
     steps: 1,
   });
   geo.center();
+  // createHeartShape()'s single smooth peak is at max-Y with the two-lobe
+  // cleft at min-Y (i.e. authored point-up). The shape is symmetric about
+  // its own vertical centerline, so rotating 180° flips it to the
+  // conventional orientation (point down, cleft up) without the inverted
+  // normals a negative-axis scale would cause.
+  geo.rotateZ(Math.PI);
   const scale = width / 1.1; // shape spans ~1.1 x ~0.95 units before normalizing
   geo.scale(scale, scale, scale);
   const mesh = new THREE.Mesh(geo, material);
   mesh.castShadow = true;
+  return mesh;
+}
+
+// Same heart shape, but width/height scale independently (uniform scaling
+// would lock the proportions to the shape's natural ~1.16:1 ratio, which is
+// too narrow for a wide heart-shaped headboard).
+function makeFlatHeartPanel(width, height, depth, material) {
+  const shape = createHeartShape();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: depth * 0.2,
+    bevelSize: depth * 0.15,
+    bevelSegments: 2,
+    steps: 1,
+  });
+  geo.center();
+  geo.rotateZ(Math.PI); // flip to point-down orientation — see note in makeHeartMesh
+  geo.scale(width / 1.1, height / 0.95, 1);
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -213,12 +243,12 @@ export function buildRoom(scene) {
   bed.position.set(-2.15, 0, -1.1);
   room.add(bed);
 
-  const frameMat = makeStandard(PALETTE.hotPink, { roughness: 0.5 });
+  const frameMat = makeStandard(PALETTE.black, { roughness: 0.45 });
   const frame = box(1.5, 0.4, 2.7, frameMat);
   frame.position.y = 0.2;
   bed.add(frame);
 
-  const legMat = makeStandard(PALETTE.chrome, { metalness: 0.9, roughness: 0.2 });
+  const legMat = makeStandard(PALETTE.black, { roughness: 0.4 });
   for (const [dx, dz] of [
     [-0.68, -1.25],
     [0.68, -1.25],
@@ -234,25 +264,55 @@ export function buildRoom(scene) {
   mattress.position.y = 0.51;
   bed.add(mattress);
 
-  const leopardBlanket = box(1.46, 0.1, 1.6, rugMat);
-  leopardBlanket.position.set(0, 0.67, 0.45);
-  bed.add(leopardBlanket);
+  // black comforter covering most of the mattress (foot end left showing)
+  const comforter = box(1.46, 0.14, 1.9, makeStandard(PALETTE.black, { roughness: 0.6 }));
+  comforter.position.set(0, 0.64, 0.35);
+  bed.add(comforter);
 
-  // headboard
-  const headboard = box(1.5, 0.9, 0.12, makeStandard(PALETTE.hotPink, { roughness: 0.5 }));
-  headboard.position.set(0, 0.65, -1.31);
+  // leopard bolster spanning the width, between the pillows and the comforter
+  const bolster = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 1.4, 16), rugMat);
+  bolster.rotation.z = Math.PI / 2;
+  bolster.position.set(0, 0.7, -0.68);
+  bolster.castShadow = true;
+  bed.add(bolster);
+
+  // ---- heart-shaped tufted headboard ----
+  const tuftingTex = createTuftingTexture({ cols: 4, rows: 3 });
+  const headboardMat = makeStandard(0xffffff, { map: tuftingTex, roughness: 0.55 });
+  const headboard = makeFlatHeartPanel(1.6, 1.05, 0.12, headboardMat);
+  headboard.position.set(0, 0.78, -1.34);
   bed.add(headboard);
-  const heart = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.045, 8, 16, Math.PI), makeStandard(PALETTE.gold, { metalness: 0.6, roughness: 0.3 }));
-  heart.position.set(0, 0.85, -1.24);
-  heart.rotation.z = Math.PI;
-  bed.add(heart);
 
-  // pillows
+  // real gold studs across the headboard face, matching the tufted-diamond grid
+  const studMat = makeStandard(PALETTE.gold, { metalness: 0.75, roughness: 0.25 });
+  const studCols = 4;
+  const studRows = 3;
+  const studAreaW = 1.15;
+  const studAreaH = 0.62;
+  for (let j = 0; j <= studRows; j++) {
+    for (let i = 0; i <= studCols; i++) {
+      const rowOffset = j % 2 !== 0 ? studAreaW / studCols / 2 : 0;
+      const sx = -studAreaW / 2 + (i / studCols) * studAreaW + rowOffset;
+      if (sx < -studAreaW / 2 - 0.01 || sx > studAreaW / 2 + 0.01) continue;
+      const sy = 0.78 - studAreaH / 2 + (j / studRows) * studAreaH;
+      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 8), studMat);
+      stud.position.set(sx, sy, -1.34 + 0.07);
+      bed.add(stud);
+    }
+  }
+
+  // pillows: black with a leopard-print corner fold
   for (const dx of [-0.42, 0.42]) {
-    const pillow = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), makeStandard(0xffffff, { roughness: 0.95 }));
+    const pillow = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), makeStandard(PALETTE.black, { roughness: 0.8 }));
     pillow.scale.set(1, 0.55, 0.75);
-    pillow.position.set(dx, 0.68, -0.95);
+    pillow.position.set(dx, 0.8, -0.95);
+    pillow.castShadow = true;
     bed.add(pillow);
+
+    const fold = box(0.42, 0.05, 0.16, rugMat);
+    fold.position.set(dx, 0.97, -1.08);
+    fold.rotation.x = -0.25;
+    bed.add(fold);
   }
 
   // ================= DESK + LAVA LAMP (clickable) =================

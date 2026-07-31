@@ -160,6 +160,67 @@ export function createZebraTexture({
   return texture;
 }
 
+/**
+ * Diamond button-tufting texture (quilted leather headboard look): soft
+ * puffy diamonds with stitch lines and small gold studs at each vertex.
+ */
+export function createTuftingTexture({
+  size = 512,
+  base = "#141015",
+  puff = "rgba(255,255,255,0.07)",
+  lineColor = "rgba(0,0,0,0.6)",
+  studColor = "#f4c34a",
+  cols = 5,
+  rows = 4,
+} = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  const dw = size / cols;
+  const dh = size / rows;
+  const verts = [];
+
+  for (let j = -1; j <= rows; j++) {
+    for (let i = -1; i <= cols + 1; i++) {
+      const cx = i * dw + (j % 2 !== 0 ? dw / 2 : 0);
+      const cy = j * dh;
+      verts.push([cx, cy]);
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - dh / 2);
+      ctx.lineTo(cx + dw / 2, cy);
+      ctx.lineTo(cx, cy + dh / 2);
+      ctx.lineTo(cx - dw / 2, cy);
+      ctx.closePath();
+
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(dw, dh) * 0.6);
+      g.addColorStop(0, puff);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = Math.max(1.5, size * 0.004);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = studColor;
+  verts.forEach(([cx, cy]) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.013, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function drawMiniHeart(ctx, cx, cy, size) {
   ctx.beginPath();
   ctx.moveTo(cx, cy + size * 0.32);
