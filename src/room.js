@@ -661,16 +661,6 @@ export function buildRoom(scene) {
   clickable.push(tv);
   glows.push(tv.children[tv.children.length - 1]);
 
-  // mirror above dresser
-  const mirrorFrame = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.035, 10, 24), makeStandard(PALETTE.gold, { metalness: 0.7, roughness: 0.25 }));
-  mirrorFrame.position.set(2.5, 1.7, -0.35);
-  mirrorFrame.rotation.y = Math.PI / 2;
-  room.add(mirrorFrame);
-  const mirrorGlass = new THREE.Mesh(new THREE.CircleGeometry(0.29, 24), makeStandard(0xcfe8ff, { metalness: 0.9, roughness: 0.05 }));
-  mirrorGlass.position.set(2.48, 1.7, -0.35);
-  mirrorGlass.rotation.y = Math.PI / 2;
-  room.add(mirrorGlass);
-
   // ================= MAGAZINE STACK (clickable) =================
   const magazines = new THREE.Group();
   magazines.position.set(0.2, 0, 1.7);
