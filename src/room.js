@@ -232,15 +232,15 @@ export function buildRoom(scene) {
   // ---------------- rug (leopard print) ----------------
   const leopardTex = createLeopardTexture({ repeatX: 3, repeatY: 3 });
   const rugMat = makeStandard(0xffffff, { map: leopardTex, roughness: 1 });
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(1.7, 32), rugMat);
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(1.55, 32), rugMat);
   rug.rotation.x = -Math.PI / 2;
-  rug.position.set(0.1, 0.008, 0.6);
+  rug.position.set(0, 0.008, 1.15);
   rug.receiveShadow = true;
   room.add(rug);
 
   // ================= BED (ambient, not clickable) =================
   const bed = new THREE.Group();
-  bed.position.set(-2.15, 0, -1.1);
+  bed.position.set(0, 0, -1.6);
   room.add(bed);
 
   const frameMat = makeStandard(PALETTE.black, { roughness: 0.45 });
@@ -315,39 +315,169 @@ export function buildRoom(scene) {
     bed.add(fold);
   }
 
+  // canopy: wall-mounted curtain rod with pom-pom trim and draped zebra
+  // fabric panels flanking the headboard
+  const canopyRodMat = makeStandard(0x1a1418, { metalness: 0.6, roughness: 0.3 });
+  const canopyRod = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.0, 12), canopyRodMat);
+  canopyRod.rotation.z = Math.PI / 2;
+  canopyRod.position.set(0, 1.95, -1.25);
+  bed.add(canopyRod);
+
+  for (let i = -9; i <= 9; i++) {
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), makeStandard(0x1a1418, { roughness: 0.8 }));
+    pom.position.set(i * 0.105, 1.9, -1.25);
+    bed.add(pom);
+  }
+
+  const canopyZebraTex = createZebraTexture({ seed: 33, repeatX: 1.2, repeatY: 2 });
+  const canopyMat = new THREE.MeshStandardMaterial({ map: canopyZebraTex, roughness: 0.7, side: THREE.DoubleSide });
+  for (const dx of [-0.85, 0.85]) {
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 1.7), canopyMat);
+    panel.position.set(dx, 1.05, -1.23);
+    panel.rotation.y = dx > 0 ? -0.15 : 0.15;
+    bed.add(panel);
+  }
+
+  // ================= NIGHTSTANDS (ambient, flanking the bed) =================
+  const nightstandZebraTex = createZebraTexture({ seed: 44, repeatX: 1.3, repeatY: 0.8 });
+  const nightstandLeopardTex = createLeopardTexture({
+    base: "#ff8fc4",
+    spotDark: "#1a1216",
+    spotMid: "#c2185b",
+    repeatX: 1.6,
+    repeatY: 0.9,
+    seed: 61,
+  });
+  const nightstandBandMats = [
+    makeStandard(0xffffff, { map: nightstandZebraTex, roughness: 0.5 }),
+    makeStandard(0xffffff, { map: nightstandLeopardTex, roughness: 0.5 }),
+  ];
+
+  function buildNightstand(x, z) {
+    const stand = new THREE.Group();
+    stand.position.set(x, 0, z);
+    room.add(stand);
+
+    const body = box(0.5, 0.5, 0.42, makeStandard(PALETTE.black, { roughness: 0.4 }));
+    body.position.y = 0.25;
+    stand.add(body);
+
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(0.54, 0.03, 0.46),
+      new THREE.MeshPhysicalMaterial({ color: 0x100c10, roughness: 0.2, clearcoat: 0.8, clearcoatRoughness: 0.15 })
+    );
+    top.position.y = 0.515;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    stand.add(top);
+
+    [0.35, 0.13].forEach((y, i) => {
+      const drawer = box(0.46, 0.19, 0.05, nightstandBandMats[i]);
+      drawer.position.set(0, y, 0.19);
+      stand.add(drawer);
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 8), makeStandard(PALETTE.gold, { metalness: 0.7 }));
+      knob.position.set(0, y, 0.23);
+      stand.add(knob);
+    });
+
+    return stand;
+  }
+
+  buildNightstand(-1.2, -2.7);
+  buildNightstand(1.2, -2.7);
+
+  // small round mirror with a pink-leopard frame above the left nightstand
+  const nightstandMirrorFrame = new THREE.Mesh(
+    new THREE.TorusGeometry(0.26, 0.045, 10, 24),
+    makeStandard(0xffffff, { map: nightstandLeopardTex, roughness: 0.6 })
+  );
+  nightstandMirrorFrame.position.set(-1.2, 1.55, -2.94);
+  room.add(nightstandMirrorFrame);
+  const nightstandMirrorGlass = new THREE.Mesh(
+    new THREE.CircleGeometry(0.23, 24),
+    makeStandard(0xcfe8ff, { metalness: 0.9, roughness: 0.05 })
+  );
+  nightstandMirrorGlass.position.set(-1.2, 1.55, -2.93);
+  room.add(nightstandMirrorGlass);
+
   // ================= DESK + LAVA LAMP (clickable) =================
   const desk = new THREE.Group();
-  desk.position.set(1.7, 0, -2.55);
+  desk.position.set(2.3, 0, -2.6);
   room.add(desk);
 
   const deskLegMat = makeStandard(PALETTE.chrome, { metalness: 0.9, roughness: 0.15 });
-  const deskTop = box(1.5, 0.06, 0.6, makeStandard(0xffffff, { roughness: 0.35 }));
+  const deskZebraTex = createZebraTexture({ seed: 71, repeatX: 2, repeatY: 0.9 });
+  const deskTop = box(1.3, 0.06, 0.6, makeStandard(0xffffff, { map: deskZebraTex, roughness: 0.4 }));
   deskTop.position.y = 0.75;
   desk.add(deskTop);
   for (const [dx, dz] of [
-    [-0.68, -0.24],
-    [0.68, -0.24],
-    [-0.68, 0.24],
-    [0.68, 0.24],
+    [-0.58, -0.24],
+    [0.58, -0.24],
+    [-0.58, 0.24],
+    [0.58, 0.24],
   ]) {
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.75, 8), deskLegMat);
     leg.position.set(dx, 0.375, dz);
     desk.add(leg);
   }
 
-  // small chair
+  // small chair, pink-leopard upholstery
+  const chairLeopardTex = createLeopardTexture({
+    base: "#ff8fc4",
+    spotDark: "#1a1216",
+    spotMid: "#c2185b",
+    repeatX: 1.4,
+    repeatY: 1.4,
+    seed: 82,
+  });
+  const chairMat = makeStandard(0xffffff, { map: chairLeopardTex, roughness: 0.6 });
   const chair = new THREE.Group();
   chair.position.set(0.1, 0, 0.75);
-  const seat = box(0.5, 0.06, 0.5, makeStandard(PALETTE.pink, { roughness: 0.6 }));
+  const seat = box(0.5, 0.06, 0.5, chairMat);
   seat.position.y = 0.45;
   chair.add(seat);
-  const seatBack = box(0.5, 0.5, 0.06, makeStandard(PALETTE.pink, { roughness: 0.6 }));
+  const seatBack = box(0.5, 0.5, 0.06, chairMat);
   seatBack.position.set(0, 0.7, -0.22);
   chair.add(seatBack);
   const chairPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.45, 8), deskLegMat);
   chairPole.position.y = 0.22;
   chair.add(chairPole);
   desk.add(chair);
+
+  // lips-shaped phone (hot pink, coiled cord) and a small remote, resting on the desk
+  const lipsMat = makeStandard(PALETTE.hotPink, { roughness: 0.3 });
+  const lips = new THREE.Group();
+  lips.position.set(-0.45, 0.785, 0.12);
+  desk.add(lips);
+  for (const [dx, s] of [
+    [-0.045, 1],
+    [0.045, 1],
+  ]) {
+    const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), lipsMat);
+    lobe.scale.set(1, 0.75, 0.65);
+    lobe.position.set(dx, 0.012, 0);
+    lips.add(lobe);
+  }
+  const lipsCenter = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 8), lipsMat);
+  lipsCenter.scale.set(1, 0.6, 0.5);
+  lipsCenter.position.set(0, -0.008, 0.01);
+  lips.add(lipsCenter);
+  const earpieceCord = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.006, 6, 12), lipsMat);
+  earpieceCord.position.set(0.09, 0.01, -0.03);
+  earpieceCord.rotation.x = Math.PI / 2.2;
+  lips.add(earpieceCord);
+
+  const remoteMat = makeStandard(PALETTE.babyPink, { roughness: 0.45 });
+  const remote = box(0.05, 0.014, 0.16, remoteMat);
+  remote.position.set(0.3, 0.782, -0.05);
+  remote.rotation.y = 0.3;
+  desk.add(remote);
+  const btnMat = makeStandard(0xffffff, { roughness: 0.5 });
+  for (let i = 0; i < 3; i++) {
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 8), btnMat);
+    btn.position.set(0, 0.009, -0.04 + i * 0.035);
+    remote.add(btn);
+  }
 
   // --- lava lamp ---
   const lavaLamp = new THREE.Group();
@@ -583,13 +713,13 @@ export function buildRoom(scene) {
     new THREE.IcosahedronGeometry(0.22, 1),
     new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.15, flatShading: true })
   );
-  discoBall.position.set(-0.3, 2.55, -1.6);
+  discoBall.position.set(1.3, 2.55, -0.8);
   room.add(discoBall);
   const discoLight = new THREE.PointLight(0xff6fb0, 0.8, 3);
   discoLight.position.copy(discoBall.position);
   room.add(discoLight);
   const discoString = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.35, 6), makeStandard(0x999999));
-  discoString.position.set(-0.3, 2.75, -1.6);
+  discoString.position.set(1.3, 2.75, -0.8);
   room.add(discoString);
   animated.push({
     update(t) {
@@ -598,13 +728,13 @@ export function buildRoom(scene) {
     },
   });
 
-  // beanbag
+  // beanbag (tan fuzzy fabric, matching the reference)
   const beanbag = new THREE.Mesh(
     new THREE.SphereGeometry(0.42, 16, 12),
-    makeStandard(0xffffff, { map: createFuzzTexture({ base: "#ff9ecf", speckle: "#ffd3ea" }), roughness: 1 })
+    makeStandard(0xffffff, { map: createFuzzTexture({ base: "#c9a488", speckle: "#e2c7a8" }), roughness: 1 })
   );
   beanbag.scale.set(1, 0.65, 1);
-  beanbag.position.set(-1.0, 0.28, 1.6);
+  beanbag.position.set(-1.35, 0.28, 1.3);
   room.add(beanbag);
 
   // posters (decorative, non-clickable) on back wall above the bed

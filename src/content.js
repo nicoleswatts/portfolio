@@ -17,8 +17,8 @@ export const projects = {
       "Placeholder project slot. Swap this description with a real case study, then point the link below at it.",
     link: "#",
     camera: {
-      position: [2.6, 1.15, -1.55],
-      target: [2.05, 0.95, -2.65],
+      position: [1.85, 1.1, -1.85],
+      target: [2.65, 0.85, -2.7],
     },
   },
   princessTv: {
