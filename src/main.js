@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { setupInteractions } from "./interactions.js";
 import { projects, defaultCamera } from "./content.js";
+import { patchBlackBlobs } from "./texturePatch.js";
 
 const canvas = document.getElementById("scene");
 
@@ -105,6 +106,48 @@ function setLoadingProgress(pct) {
   loadingFill.style.width = `${Math.min(Math.max(pct, 0), 100)}%`;
 }
 
+// Some of room2.glb's source diffuse textures have irregular near-black
+// blobs baked into the pixel data (confirmed by inspecting the raw images —
+// not a UV/transparency/loading bug). This clone-stamps over them at load
+// time as a cosmetic stopgap; see texturePatch.js for the real explanation
+// and its limits. The actual fix is patching the source textures in Blender.
+function patchMaterialTextures(root) {
+  const seen = new Map(); // source texture uuid -> patched THREE.CanvasTexture (or null if nothing to fix)
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach((mat) => {
+      const tex = mat?.map;
+      if (!tex || !tex.image) return;
+      if (!seen.has(tex.uuid)) {
+        let patched = null;
+        try {
+          const canvas = patchBlackBlobs(tex.image);
+          if (canvas) {
+            patched = new THREE.CanvasTexture(canvas);
+            patched.colorSpace = tex.colorSpace;
+            patched.wrapS = tex.wrapS;
+            patched.wrapT = tex.wrapT;
+            patched.repeat.copy(tex.repeat);
+            patched.offset.copy(tex.offset);
+            patched.flipY = tex.flipY;
+            patched.anisotropy = tex.anisotropy;
+          }
+        } catch (err) {
+          console.warn("Texture patch failed for", tex.name || tex.uuid, err);
+        }
+        seen.set(tex.uuid, patched);
+      }
+      const patched = seen.get(tex.uuid);
+      if (patched) {
+        mat.map = patched;
+        mat.needsUpdate = true;
+      }
+    });
+  });
+  return seen.size;
+}
+
 const loader = new GLTFLoader();
 loader.load(
   "assets/room2.glb",
@@ -115,9 +158,17 @@ loader.load(
         obj.receiveShadow = true;
       }
     });
-    scene.add(gltf.scene);
-    setLoadingProgress(100);
-    setTimeout(() => loadingScreen.classList.add("hidden"), 250);
+
+    if (loadingText) loadingText.textContent = "✧ patching textures ✧";
+    // Synchronous and can take a beat on ~19 textures — the loading screen
+    // is still up, so a short pause here reads as "still loading" rather
+    // than a jarring pop-in of fixed textures after the room is visible.
+    setTimeout(() => {
+      patchMaterialTextures(gltf.scene);
+      scene.add(gltf.scene);
+      setLoadingProgress(100);
+      setTimeout(() => loadingScreen.classList.add("hidden"), 250);
+    }, 30);
   },
   (xhr) => {
     if (xhr.total) setLoadingProgress((xhr.loaded / xhr.total) * 100);
