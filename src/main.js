@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildRoom } from "./room.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { setupInteractions } from "./interactions.js";
 import { projects, defaultCamera } from "./content.js";
 
@@ -17,34 +17,45 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 // ---------------- scene & camera ----------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2a0f1e);
-scene.fog = new THREE.Fog(0x2a0f1e, 6, 14);
+// room2.glb is roughly 20 units across (vs. the old procedural room's 6),
+// so fog needs to reach much further out before anything gets swallowed.
+scene.fog = new THREE.Fog(0x2a0f1e, 20, 45);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(...defaultCamera.position);
 
 // ---------------- lighting ----------------
-const hemi = new THREE.HemisphereLight(0xffd9ec, 0x6b3a55, 0.9);
+const hemi = new THREE.HemisphereLight(0xffd9ec, 0x6b3a55, 1.0);
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(0xffffff, 0.9);
-key.position.set(2, 4, 3);
+const key = new THREE.DirectionalLight(0xffffff, 1.0);
+key.position.set(8, 14, 6);
 key.castShadow = true;
-key.shadow.mapSize.set(1024, 1024);
-key.shadow.camera.left = -4;
-key.shadow.camera.right = 4;
-key.shadow.camera.top = 4;
-key.shadow.camera.bottom = -4;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -14;
+key.shadow.camera.right = 14;
+key.shadow.camera.top = 14;
+key.shadow.camera.bottom = -14;
+key.shadow.camera.far = 45;
 scene.add(key);
 
-const fill = new THREE.PointLight(0xff9ecf, 0.5, 8);
-fill.position.set(-2, 2, 2);
+const fill = new THREE.PointLight(0xff9ecf, 0.6, 24);
+fill.position.set(-6, 6, 6);
 scene.add(fill);
 
-const ambient = new THREE.AmbientLight(0xffe6f2, 0.35);
+const ambient = new THREE.AmbientLight(0xffe6f2, 0.5);
 scene.add(ambient);
 
-// ---------------- room ----------------
-const { clickable, glows, animated } = buildRoom(scene);
+// ---------------- room (loaded from Blender) ----------------
+// TODO: once specific meshes/nodes to make clickable are picked out, find
+// them via gltf.scene.getObjectByName(...) in the loader callback below,
+// set <node>.userData.id = "someKeyInContentJs", and clickable.push(node)
+// (+ addGlow-equivalent if a hover halo is wanted). clickable/glows/animated
+// are passed by reference into setupInteractions before the model finishes
+// loading, so pushing into them later still works.
+const clickable = [];
+const glows = [];
+const animated = [];
 
 // ---------------- controls ----------------
 const controls = new OrbitControls(camera, canvas);
@@ -52,16 +63,20 @@ controls.target.set(...defaultCamera.target);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.enablePan = false;
-// Kept deliberately tight: this is the *overview* orbit range, and the room
-// walls are only ~3 units from center, so wide swings at this distance would
-// push the camera clean through them. (Close-up project shots use their own
-// unconstrained range — see relaxConstraints() in interactions.js.)
-controls.minDistance = 5.6;
-controls.maxDistance = 6.4;
-controls.minPolarAngle = Math.PI * 0.32;
-controls.maxPolarAngle = Math.PI * 0.42;
-controls.minAzimuthAngle = -Math.PI * 0.1;
-controls.maxAzimuthAngle = Math.PI * 0.1;
+// room2.glb's three walls form a U open on the +X side (verified from the
+// loaded model's bounding box), so the safe orbit range is centered on
+// azimuth = +90° (OrbitControls measures azimuth from the +Z axis via
+// atan2(x, z), NOT from wherever the camera starts — a plain ±range around
+// 0 would swing the camera toward the z-walls instead of staying on the
+// open side). Confirmed clipping-free at all four boundary combinations by
+// simulating extreme drags/zooms and checking the resulting position stays
+// outside the x:-10..10 / z:-10..9.85 wall footprint.
+controls.minDistance = 14;
+controls.maxDistance = 20;
+controls.minPolarAngle = Math.PI * 0.3;
+controls.maxPolarAngle = Math.PI * 0.45;
+controls.minAzimuthAngle = Math.PI / 2 - 0.18;
+controls.maxAzimuthAngle = Math.PI / 2 + 0.18;
 controls.update();
 
 // ---------------- interactions ----------------
@@ -81,18 +96,37 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---------------- loading screen ----------------
+// ---------------- loading screen (real GLB download progress) ----------------
 const loadingScreen = document.getElementById("loading-screen");
+const loadingText = document.querySelector(".loading-text");
 const loadingFill = document.querySelector(".loading-bar-fill");
-let progress = 0;
-const loadingInterval = setInterval(() => {
-  progress = Math.min(progress + 8 + Math.random() * 10, 100);
-  loadingFill.style.width = `${progress}%`;
-  if (progress >= 100) {
-    clearInterval(loadingInterval);
+
+function setLoadingProgress(pct) {
+  loadingFill.style.width = `${Math.min(Math.max(pct, 0), 100)}%`;
+}
+
+const loader = new GLTFLoader();
+loader.load(
+  "assets/room2.glb",
+  (gltf) => {
+    gltf.scene.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+    scene.add(gltf.scene);
+    setLoadingProgress(100);
     setTimeout(() => loadingScreen.classList.add("hidden"), 250);
+  },
+  (xhr) => {
+    if (xhr.total) setLoadingProgress((xhr.loaded / xhr.total) * 100);
+  },
+  (error) => {
+    console.error("Failed to load assets/room2.glb", error);
+    if (loadingText) loadingText.textContent = "✧ couldn't load the room ✧";
   }
-}, 70);
+);
 
 // ---------------- render loop ----------------
 const clock = new THREE.Clock();
