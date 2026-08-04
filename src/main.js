@@ -148,6 +148,99 @@ function patchMaterialTextures(root) {
   return seen.size;
 }
 
+// The scattered magazine/photo props on the rug are built from a few hundred
+// triangles each — clearly meant to be masked by a texture alpha channel
+// down into a soft torn-paper silhouette, the same way the bed's tufted
+// panels use extra geometry for detail. But the alpha channel is missing
+// entirely (checked: every pixel comes back fully opaque, no vertex colors
+// either), so none of that geometry gets masked and it all renders as solid
+// jagged shards instead. There's no data left anywhere in the file to
+// recover the intended shape from, so the fix is structural: replace each
+// with a simple flat plane sized to its own bounding box, keeping the same
+// texture/position/rotation. Named explicitly rather than auto-detected by
+// triangle count, since a generic "simplify anything complex" pass would
+// also catch legitimately-detailed geometry elsewhere (the headboard, the
+// curtains) that isn't broken.
+const FLATTEN_TO_PLANE = ["s4studio_mesh_1004", "s4studio_mesh_1005", "s4studio_mesh_1008", "s4studio_mesh_1009"];
+
+function simplifyToFlatPlane(mesh) {
+  const pos = mesh.geometry.attributes.position;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  const extentX = maxX - minX;
+  const extentY = maxY - minY;
+  const extentZ = maxZ - minZ;
+  // The flattest axis is the plane's normal direction — these props lie on
+  // the floor, so it's Y for all of them, but handle wall/other cases too.
+  const flatAxis = [extentX, extentY, extentZ].indexOf(Math.min(extentX, extentY, extentZ));
+
+  let newGeo;
+  if (flatAxis === 1) {
+    newGeo = new THREE.PlaneGeometry(extentX, extentZ);
+    newGeo.rotateX(-Math.PI / 2);
+  } else if (flatAxis === 2) {
+    newGeo = new THREE.PlaneGeometry(extentX, extentY);
+  } else {
+    newGeo = new THREE.PlaneGeometry(extentZ, extentY);
+    newGeo.rotateY(Math.PI / 2);
+  }
+  newGeo.translate((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+  mesh.material.side = THREE.DoubleSide; // a single flat plane has no "inside" to rely on culling for
+
+  if (mesh.isSkinnedMesh) {
+    // Three of these four props turned out to be SkinnedMesh, rigged to one
+    // of the bone armatures bundled in the file — a likely actual source of
+    // the shattering (broken bind/bone transforms exploding vertices at
+    // render time), on top of or instead of the missing-alpha theory.
+    // Swapping just .geometry would leave a SkinnedMesh instance with no
+    // skinIndex/skinWeight attributes, which renders fine here but crashes
+    // other code paths that expect them (found via Box3.expandByObject).
+    // Replace it with a plain Mesh entirely so no skinning code runs on it.
+    const plain = new THREE.Mesh(newGeo, mesh.material);
+    plain.name = mesh.name;
+    plain.position.copy(mesh.position);
+    plain.quaternion.copy(mesh.quaternion);
+    plain.scale.copy(mesh.scale);
+    plain.castShadow = mesh.castShadow;
+    plain.receiveShadow = mesh.receiveShadow;
+    const parent = mesh.parent;
+    parent.add(plain);
+    parent.remove(mesh);
+    mesh.geometry.dispose();
+    return;
+  }
+
+  mesh.geometry.dispose();
+  mesh.geometry = newGeo;
+}
+
+function simplifyFlatProps(root) {
+  let count = 0;
+  FLATTEN_TO_PLANE.forEach((name) => {
+    const obj = root.getObjectByName(name);
+    if (obj?.isMesh) {
+      simplifyToFlatPlane(obj);
+      count++;
+    }
+  });
+  return count;
+}
+
 const loader = new GLTFLoader();
 loader.load(
   "assets/room2.glb",
@@ -165,6 +258,7 @@ loader.load(
     // than a jarring pop-in of fixed textures after the room is visible.
     setTimeout(() => {
       patchMaterialTextures(gltf.scene);
+      simplifyFlatProps(gltf.scene);
       scene.add(gltf.scene);
       setLoadingProgress(100);
       setTimeout(() => loadingScreen.classList.add("hidden"), 250);
